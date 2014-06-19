@@ -7,6 +7,17 @@
  */
 
 class leaflet_views_plugin_style extends views_plugin_style {
+  /**
+   * Store the entity type.
+   * @var string
+   */
+  protected $entity_type;
+
+  /**
+   * Store the entity info array.
+   * @var array
+   */
+  protected $entity_info;
 
   /**
    * If this view is displaying an entity, save the entity type and info.
@@ -14,11 +25,21 @@ class leaflet_views_plugin_style extends views_plugin_style {
   function init(&$view, &$display, $options = NULL) {
     parent::init($view, $display, $options);
 
-    foreach (entity_get_info() as $key => $info) {
-      if ($view->base_table == $info['base table']) {
-        $this->entity_type = $key;
-        $this->entity_info = $info;
-        break;
+    // Search api indexes store the entity metadata in the views data array.
+    if (strpos($view->base_table, 'search_api_index_') === 0) {
+      $views_data = views_fetch_data();
+      if (isset($views_data[$view->base_table]['table']['entity type'])) {
+        $this->entity_type = $views_data[$view->base_table]['table']['entity type'];
+        $this->entity_info = entity_get_info($this->entity_type);
+      }
+    }
+    else {
+      foreach (entity_get_info() as $key => $info) {
+        if ($view->base_table == $info['base table']) {
+          $this->entity_type = $key;
+          $this->entity_info = $info;
+          break;
+        }
       }
     }
   }
@@ -136,7 +157,7 @@ class leaflet_views_plugin_style extends views_plugin_style {
     ), $fields);
 
     // Add an option to render the entire entity using a view mode.
-    if ($this->entity_type) {
+    if (!empty($this->entity_type)) {
       $desc_options += array(
         '#rendered_entity' => '<' . t('!entity entity', array('!entity' => $this->entity_type)) . '>',
       );
@@ -153,7 +174,7 @@ class leaflet_views_plugin_style extends views_plugin_style {
 
     // Taken from openlayers_views_style_data::options_form().
     // Create view mode options:
-    if ($this->entity_type) {
+    if (!empty($this->entity_type)) {
 
       // Get the labels (human readable) of the view modes:
       $view_mode_options = array();
@@ -209,7 +230,11 @@ class leaflet_views_plugin_style extends views_plugin_style {
     $form['zoom'] = leaflet_form_elements('zoom', $this->options);
     $form['icon'] = leaflet_form_elements('icon', $this->options, array('path' => 'style_options', 'fields' => $fields));
     $form['vector_display'] = leaflet_form_elements('vector_display', $this->options, array('path' => 'style_options'));
-    $form['tokens'] = leaflet_form_elements('tokens', $this->options, array('weight' => 998, 'entity_type' => $this->entity_type));
+    $token_options = array('weight' => 998, 'entity_type' => NULL);
+    if (!empty($this->entity_type)) {
+      $token_options['entity_type'] = $this->entity_type;
+    }
+    $form['tokens'] = leaflet_form_elements('tokens', $this->options, $token_options);
   }
 
   /**
@@ -230,6 +255,11 @@ class leaflet_views_plugin_style extends views_plugin_style {
     }
     $data = array();
     $map = leaflet_map_get_info($this->options['map']);
+    // Fetch result entities if necessary.
+    $entities = array();
+    if ($this->options['description_field'] === '#rendered_entity') {
+      list(, $entities) = $this->view->query->get_result_entities($this->view->result);
+    }
     // Is there a geofield selected?
     if ($this->options['data_source']) {
       $this->render_fields($this->view->result);
@@ -239,9 +269,12 @@ class leaflet_views_plugin_style extends views_plugin_style {
         if (!empty($geofield)) {
           $entity = FALSE;
           // Render the entity with the selected view mode:
-          if ($this->options['description_field'] === '#rendered_entity' && is_object($result)) {
-            $entity = entity_load_single($this->entity_type, $result->{$this->entity_info['entity keys']['id']});
-            $build = entity_view($this->entity_type, array($entity), $this->options['view_mode']);
+          if ($this->options['description_field'] === '#rendered_entity') {
+            // If the entity wasn't fetched previously try our best to load it.
+            if (!isset($entities[$id]) && isset($result->{$this->entity_info['entity keys']['id']})) {
+              $entities[$id] = entity_load_single($this->entity_type, $result->{$this->entity_info['entity keys']['id']});
+            }
+            $build = entity_view($this->entity_type, array($entities[$id]), $this->options['view_mode']);
             $description = drupal_render($build);
           }
           // Normal rendering via fields:
