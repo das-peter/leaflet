@@ -122,7 +122,18 @@ class leaflet_views_plugin_style extends views_plugin_style {
     foreach ($handlers as $field_id => $handler) {
       $fields[$field_id] = $handler->ui_name();
 
-      if (!empty($handler->field_info['type']) && $handler->field_info['type'] == 'geofield') {
+      $field_info = NULL;
+      if (!empty($handler->field_info)) {
+        $field_info = $handler->field_info;
+      }
+      elseif ($this->is_entity_views_handler($handler)) {
+        // Strip the basic field name from the entity views handler field and
+        // fetch the field info for it.
+        $field_name = ltrim(substr($handler->real_field, 0, strpos($handler->real_field, ':')), ':');
+        $field_info = field_info_field($field_name);
+      }
+
+      if (!empty($field_info['type']) && $field_info['type'] == 'geofield') {
         $fields_data[$field_id] = $handler->ui_name();
       }
     }
@@ -266,10 +277,23 @@ class leaflet_views_plugin_style extends views_plugin_style {
     // Is there a geofield selected?
     if ($this->options['data_source']) {
       $this->render_fields($this->view->result);
+      // Support for entity views integration.
+      $geofield_handler = $this->view->display_handler->get_handler('field', $this->options['data_source']);
+      if (($is_entity_views_handler = $this->is_entity_views_handler($geofield_handler))) {
+        $geofield_property = EntityFieldHandlerHelper::get_selector_field_name($geofield_handler->real_field);
+      }
+
       foreach ($this->view->result as $id => $result) {
         $geofield = $this->get_field_value($id, $this->options['data_source']);
 
         if (!empty($geofield)) {
+          // Check if this field is handled by the entity views integration.
+          if ($is_entity_views_handler) {
+            // Use the entity field wrapper to fetch all the data an not just
+            // a single property.
+            $geofield = array($geofield_handler->wrappers[$id]->raw());
+          }
+
           $entity = FALSE;
           // Render the entity with the selected view mode:
           if ($this->options['description_field'] === '#rendered_entity') {
@@ -314,5 +338,29 @@ class leaflet_views_plugin_style extends views_plugin_style {
       return leaflet_build_map($map, $data, $this->options['height'] . 'px');
     }
     return '';
+  }
+
+  /**
+   * Checks if a field handler class is handled by the entity module.
+   *
+   * @param object $field_handler_instance
+   *   The field handler instance to check.
+   *
+   * @return bool
+   *   TRUE if the field is handled by the entity module views integration.
+   */
+  public function is_entity_views_handler($field_handler_instance) {
+    $static_cache = &drupal_static(__METHOD__, array());
+    $handler_class = get_class($field_handler_instance);
+
+    if (!isset($static_cache[$handler_class])) {
+      $static_cache[$handler_class] = FALSE;
+      foreach (entity_views_get_field_handlers() as $field_handler) {
+        if ($field_handler_instance instanceof $field_handler) {
+          return $static_cache[$handler_class] = TRUE;
+        }
+      }
+    }
+    return $static_cache[$handler_class];
   }
 }
