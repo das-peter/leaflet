@@ -31,12 +31,24 @@
 
           // keep the reference of first layer
           // as written in the doc (http://leafletjs.com/examples/layers-control.html)
-          // "Also note that when using multiple base layers, only one of them should be added to the map at instantiation, but all of them should be present in the base layers object when creating the layers control.""
+          // "Also note that when using multiple base layers, only one of them should be added to the map at instantiation, but all of them should be present in the base layers object when creating the layers control."
           if (i == 0) {
-            // add first layer to the map
-            lMap.addLayer(map_layer);
+            // flag the first layer as the default layer.
+            var default_key = key;
           }
           i++;
+        }
+        // We loop through the layers once they have all been created to connect them to their switchlayer if necessary.
+        var switchEnable = false;
+        for (var key in layers) {
+          if (layers[key].options.switchLayer) {
+            layers[key].setSwitchLayer(layers[layers[key].options.switchLayer]);
+            switchEnable = true;
+          }
+        }
+        lMap.addLayer(layers[default_key]);
+        if (switchEnable) {
+          switchManager = new SwitchLayerManager(lMap, {baseLayers: layers});
         }
 
         // keep an instance of leaflet layers
@@ -175,7 +187,8 @@
   Drupal.leaflet = {
 
     create_layer: function (layer, key) {
-      var map_layer = new L.TileLayer(layer.urlTemplate);
+      // Use a Zoomswitch Layer extension to enable zoom-switch option.
+      var map_layer = new L.TileLayerZoomSwitch(layer.urlTemplate);
       map_layer._leaflet_id = key;
 
       if (layer.options) {
@@ -366,5 +379,88 @@
       }
     }
   };
+
+  // Zoomswitch method cribbed liberally from:
+  // http://www.makina-corpus.org/blog/leaflet-zoom-switcher
+  L.TileLayerZoomSwitch = L.TileLayer.extend({
+    includes: L.Mixin.Events,
+
+    options: {
+      // switchZoomUnder: when zoom < switchZoomUnder, then switch to switchLayer
+      switchZoomUnder: -1,
+      // switchZoomAbove: when zoom >= switchZoomAbove, then switch to switchLayer
+      switchZoomAbove: -1,
+      switchLayer: null
+    },
+
+    setSwitchLayer: function (layer) {
+      this.options.switchLayer = layer;
+    },
+
+    getSwitchZoomUnder: function () {
+      return this.options.switchZoomUnder;
+    },
+
+    getSwitchZoomAbove: function () {
+      return this.options.switchZoomAbove;
+    },
+
+    getSwitchLayer: function () {
+      return this.options.switchLayer;
+    }
+
+  });
+
+  L.tileLayerZoomSwitch = function (url, options) {
+    return new L.TileLayerZoomSwitch(url, options);
+  };
+
+  /*
+   * SwitchLayerManager is a custom class for managing base layer automatic switching according to the current zoom level
+   */
+
+  SwitchLayerManager = L.Class.extend({
+
+    _map: null,
+
+    options: {
+      baseLayers: null
+    },
+
+    initialize: function (map, options) {
+      this._map = map;
+      L.Util.setOptions(this, options);
+
+      this._map.on({
+        'zoomend': this._update
+      }, this)
+
+    },
+
+    _update: function (e) {
+      var zoom = this._map.getZoom();
+
+      for (var i in this.options.baseLayers) {
+        var curBL = this.options.baseLayers[i];
+        var zoomUnder = curBL.getSwitchZoomUnder();
+        var zoomAbove = curBL.getSwitchZoomAbove();
+        var switchLayer = curBL.getSwitchLayer();
+
+        // If layer got a switchlayer, and if layer actually displayed
+        if (switchLayer && curBL._map != null) {
+        //if (switchLayer) {
+          if(zoomUnder != -1 && zoom < zoomUnder) {
+            this._map.removeLayer(curBL);
+            this._map.addLayer(switchLayer, false);
+          }
+
+          if(zoomAbove != -1 && zoom >= zoomAbove) {
+            this._map.removeLayer(curBL);
+            this._map.addLayer(switchLayer, false);
+          }
+        }
+      }
+    }
+  });
 
 })(jQuery);
