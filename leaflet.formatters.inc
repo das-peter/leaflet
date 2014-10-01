@@ -453,16 +453,16 @@ function leaflet_token_replace(&$subject, $key, $data = array()) {
 
 /**
  * Helper function to standardize forms between views and field formatters.
- * 
+ *
  * $group - String
  *  The name of the group element to generate.
- * 
+ *
  * $settings - Array
  *  Current form settings (for defaults, etc)
- * 
+ *
  * $options - Array
  *  Special options needed for this form element, if necessary.
- * 
+ *
  * Return - A fully loaded form element.
  */
 function leaflet_form_elements($group, $settings, $options = NULL) {
@@ -872,6 +872,7 @@ function leaflet_form_elements($group, $settings, $options = NULL) {
         '#type' => 'container',
         '#theme' => 'token_tree',
         '#token_types' => array($options['entity_type']),
+        '#dialog' => TRUE,
       );
       break;
 
