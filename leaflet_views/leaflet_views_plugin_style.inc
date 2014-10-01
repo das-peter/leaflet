@@ -49,6 +49,10 @@ class leaflet_views_plugin_style extends views_plugin_style {
    */
   function option_definition() {
     $options = parent::option_definition();
+    $options['attachment']['contains'] = array(
+      'feature_group' => array('default' => FALSE, 'bool' => TRUE),
+      'layer_control' => array('default' => TRUE, 'bool' => TRUE),
+    );
     $options['data_source'] = array('default' => '');
     $options['name_field'] = array('default' => '');
     $options['description_field'] = array('default' => '');
@@ -211,6 +215,23 @@ class leaflet_views_plugin_style extends views_plugin_style {
       );
     }
 
+    $form['attachment'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Attachment handling'),
+    );
+    $form['attachment']['feature_group'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Render as features group'),
+      '#description' => t('Renders this as feature group that can be used to attach to another map.'),
+      '#default_value' => $this->options['attachment']['feature_group'],
+    );
+    $form['attachment']['layer_control'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Add layer control for features groups.'),
+      '#description' => t('Adds a layer control to the map if features groups are found.'),
+      '#default_value' => $this->options['attachment']['feature_group'],
+    );
+
     // Choose a map preset:
     $map_options = array();
     foreach (leaflet_map_get_info() as $key => $map) {
@@ -223,6 +244,11 @@ class leaflet_views_plugin_style extends views_plugin_style {
       '#options' => $map_options,
       '#default_value' => $this->options['map'] ? $this->options['map'] : '',
       '#required' => TRUE,
+      '#states' => array(
+        'invisible' => array(
+          ':input[name="style_options[attachment][feature_group]"]' => array('checked' => TRUE),
+        ),
+      ),
     );
 
     $form['height'] = array(
@@ -232,6 +258,11 @@ class leaflet_views_plugin_style extends views_plugin_style {
       '#size' => 4,
       '#default_value' => $this->options['height'],
       '#required' => FALSE,
+      '#states' => array(
+        'invisible' => array(
+          ':input[name="style_options[attachment][feature_group]"]' => array('checked' => TRUE),
+        ),
+      ),
     );
 
     $form['hide_empty'] = array(
@@ -242,6 +273,7 @@ class leaflet_views_plugin_style extends views_plugin_style {
     );
 
     $form['zoom'] = leaflet_form_elements('zoom', $this->options);
+    $form['zoom']['#states']['invisible'][':input[name="style_options[attachment][feature_group]"]'] = array('checked' => TRUE);
     $form['icon'] = leaflet_form_elements('icon', $this->options, array('path' => 'style_options', 'fields' => $fields));
     $form['vector_display'] = leaflet_form_elements('vector_display', $this->options, array('path' => 'style_options'));
     $token_options = array('weight' => 998, 'entity_type' => NULL);
@@ -332,12 +364,116 @@ class leaflet_views_plugin_style extends views_plugin_style {
         }
       }
       leaflet_apply_map_settings($map, $data, $this->options, $this->entity_type);
+
+      // Ensure views areas attached to the header / footer area are rendered.
+      // We've to do this by our own because otherwise those areas are rendered
+      // to late.
+      $this->render_area_leaflet_maps();
+
+      // If this configured to be rendered as feature group create the data.
+      if ($this->is_attachment() && !empty($this->options['attachment']['feature_group'])) {
+
+        if (!empty($data) || empty($this->options['hide_empty'])) {
+          $map_id = drupal_html_id('leaflet-map-views-' . $this->view->name . '-' . $this->display->id);
+          $title = strip_tags($this->display->handler->get_option('title'));
+          $feature_group_config = array(
+            'group' => TRUE,
+            'leaflet_id' => $map_id,
+            'label' => $title,
+            'layers' => array(),
+            'settings' => array(),
+          );
+          // Use leaflet_map_prebuild() to trigger the alter hooks.
+          $settings = leaflet_map_prebuild($map_id, $feature_group_config, $data);
+          $this->attached_map_data($settings['map'] + array('features' => $settings['features']));
+        }
+        return '';
+      }
+      else {
+        $attachment_data = $this->attached_map_data();
+        foreach ($attachment_data as $attachment_id => $attachment) {
+          $data[] = $attachment;
+        }
+        // Explicitly add layer control to the map if enabled.
+        if (!empty($attachment_data)  && !empty($this->options['attachment']['layer_control'])) {
+          $map['settings']['layerControl'] = TRUE;
+        }
+      }
       if (empty($data) && !empty($this->options['hide_empty'])) {
         return '';
       }
       return leaflet_build_map($map, $data, $this->options['height'] . 'px');
     }
     return '';
+  }
+
+  /**
+   * Ensures leaflet maps added to footer / header are pre-rendered.
+   *
+   * This ensures leaflet maps configured as feature groups are added to the
+   * cached features.
+   */
+  public function render_area_leaflet_maps() {
+    foreach (array('footer', 'header') as $area) {
+      foreach ($this->display->handler->get_handlers($area) as $handler) {
+        // Check if the handler is an views area and if it is properly set up.
+        if ($handler instanceof views_handler_area_view && !empty($handler->options['view_to_insert'])) {
+          // Load the related view.
+          list($view_name, $display_id) = explode(':', $handler->options['view_to_insert']);
+          $view = views_get_view($view_name);
+
+          // Inject a new parent views so that self::attached_map_data_id() can
+          // extract the proper id to store the collected features data.
+          $handler->view->parent_views[] = $this->view->name . ':' . $this->display->id;
+
+          // If the added view has the leaflet style and the style is configured
+          // to be rendered as feature group trigger rendering right now.
+          if (isset($view->display[$display_id]->display_options['style_plugin']) && $view->display[$display_id]->display_options['style_plugin'] == 'leaflet' && !empty($view->display[$display_id]->display_options['style_options']['attachment']['feature_group'])) {
+            $handler->render();
+            // @TODO Shall we remove this handler now? It won't have any other
+            // output to show in the area it's rendered.
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Stores attached map data and returns all attached map data.
+   *
+   * We need to use the static data because the views object of attachments is a
+   * clone and lost after the attachment is executed.
+   * But we need a way to figure out what data are attached.
+   *
+   * @param array $data
+   *   The data as used to create a features group.
+   *
+   * @return array
+   *   The attached map data.
+   */
+  public function attached_map_data($data = NULL) {
+    $attached_map_data = &drupal_static(__METHOD__, array());
+    $cid = $this->attached_map_data_id();
+    if (!isset($attached_map_data[$cid])) {
+      $attached_map_data[$cid] = array();
+    }
+    if ($data !== NULL) {
+      $attached_map_data[$cid][$this->view->name . ':' . $this->display->id] = $data;
+    }
+    return $attached_map_data[$cid];
+  }
+
+  /**
+   * Returns the id to use to collect the attached map data.
+   *
+   * @return string
+   */
+  public function attached_map_data_id() {
+    if (!empty($this->view->parent_views)) {
+      $parent_views = array_slice($this->view->parent_views, -2, 1);
+      return reset($parent_views);
+    }
+    return $this->view->name . ':' . $this->display->id;
   }
 
   /**
@@ -362,5 +498,15 @@ class leaflet_views_plugin_style extends views_plugin_style {
       }
     }
     return $static_cache[$handler_class];
+  }
+
+  /**
+   * Checks if this view / display is an attachment.
+   *
+   * @return bool
+   *   TRUE if this view / display is an attachment.
+   */
+  public function is_attachment() {
+    return !empty($this->is_attachment) || $this->view->display_handler instanceof views_plugin_display_attachment || !empty($this->view->parent_views);
   }
 }

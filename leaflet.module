@@ -80,6 +80,9 @@ function leaflet_libraries_info() {
  *   Associative array of map features.
  * @param string $height
  *   The height of the map.
+ * @param string $map_id
+ *   Custom id for the map. By default the prefix leaflet_map with an
+ *   incrementing suffix is used. See drupal_html_id().
  *
  * @return array
  *   A renderable array.
@@ -96,21 +99,7 @@ function leaflet_build_map($map, $features = array(), $height = '400px') {
     ),
   );
 
-  // Allow map definitions to provide a default icon:
-  if (isset($map['icon']['iconUrl'])) {
-    foreach ($features as &$feature) {
-      if (!isset($feature['icon'])) {
-        $feature['icon'] = $map['icon'];
-      }
-    }
-  }
-
-  $settings = array(
-    'mapId' => $map_id,
-    'map' => $map,
-    'features' => $features,
-  );
-  drupal_alter('leaflet_map_prebuild', $settings);
+  $settings = leaflet_map_prebuild($map_id, $map, $features);
 
   $build['#attached']['js'][] = array(
     'data' => array('leaflet' => array($settings)),
@@ -127,8 +116,41 @@ function leaflet_build_map($map, $features = array(), $height = '400px') {
 }
 
 /**
+ * Pre-build drupal leaflet JS settings.
+ *
+ * @param string $map_id
+ *   The map id.
+ * @param array $map
+ *   Map definition as returned my leaflet_map_get_info();
+ * @param array $features
+ *   Associative array of map features.
+ *
+ * @return array
+ *   An array ready to be used as drupal leaflet JS settings.
+ */
+function leaflet_map_prebuild($map_id, $map, $features) {
+  // Allow map definitions to provide a default icon:
+  if (isset($map['icon']['iconUrl'])) {
+    foreach ($features as &$feature) {
+      if (!isset($feature['icon'])) {
+        $feature['icon'] = $map['icon'];
+      }
+    }
+  }
+
+  $settings = array(
+    'mapId' => $map_id,
+    'map' => $map,
+    'features' => $features,
+  );
+  drupal_alter('leaflet_map_prebuild', $settings);
+
+  return $settings;
+}
+
+/**
  * DEPRECATED. Use leaflet_build_map() instead.
- * 
+ *
  * Load all Leaflet required client files and return markup for a map.
  *
  * @param array $map
