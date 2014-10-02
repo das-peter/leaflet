@@ -391,13 +391,22 @@ function leaflet_apply_map_settings(&$map, &$features, $map_settings, $entity_ty
 
     // Apply Icon settings:
     if ($icon == 'html') {
-      $icon_config = array(
-        'label' => 'hidden',
-        'settings' => array(
-          'image_style' => isset($settings['icon']['iconImageStyle']) ? $settings['icon']['iconImageStyle'] : '',
-        ),
-      );
-      $icon_field = field_view_field($entity_type, $feat['entity'], $settings['icon']['html'], $icon_config);
+
+      // Maps handled by Views will have rendered HTML already.
+      if (isset($feat['rendered_html'])) {
+        $feat['html'] = $feat['rendered_html'];
+      }
+      else {
+        $icon_config = array(
+          'label' => 'hidden',
+          'settings' => array(
+            'image_style' => isset($settings['icon']['iconImageStyle']) ? $settings['icon']['iconImageStyle'] : '',
+          ),
+        );
+        $icon_field = field_view_field($entity_type, $feat['entity'], $settings['icon']['html'], $icon_config);
+        $feat['html'] = render($icon_field);
+      }
+
       if (!empty($settings['icon']['iconSize']['x']) || !empty($settings['icon']['iconSize']['y'])) {
         // We hand the size off to the API, but the rendered HTML will dictate
         // its own size, so we override that as well.
@@ -414,7 +423,7 @@ function leaflet_apply_map_settings(&$map, &$features, $map_settings, $entity_ty
           }
         }
       }
-      $feat['html'] = render($icon_field);
+
       $feat['html_class'] = $settings['icon']['htmlClass'];
       $feat['icon']['iconAnchor'] = $settings['icon']['iconAnchor'];
     }
@@ -453,16 +462,16 @@ function leaflet_token_replace(&$subject, $key, $data = array()) {
 
 /**
  * Helper function to standardize forms between views and field formatters.
- * 
+ *
  * $group - String
  *  The name of the group element to generate.
- * 
+ *
  * $settings - Array
  *  Current form settings (for defaults, etc)
- * 
+ *
  * $options - Array
  *  Special options needed for this form element, if necessary.
- * 
+ *
  * Return - A fully loaded form element.
  */
 function leaflet_form_elements($group, $settings, $options = NULL) {
