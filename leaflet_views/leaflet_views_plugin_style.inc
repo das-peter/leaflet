@@ -421,7 +421,7 @@ class leaflet_views_plugin_style extends views_plugin_style {
    */
   public function render_area_leaflet_maps() {
     foreach (array('footer', 'header') as $area) {
-      foreach ($this->display->handler->get_handlers($area) as $handler) {
+      foreach ($this->display->handler->get_handlers($area) as $handler_id => $handler) {
         // Check if the handler is an views area and if it is properly set up.
         if ($handler instanceof views_handler_area_view && !empty($handler->options['view_to_insert'])) {
           // Load the related view.
@@ -439,10 +439,10 @@ class leaflet_views_plugin_style extends views_plugin_style {
           $style_options = $view->display_handler->get_option('style_options');
           if ($style_plugin == 'leaflet' && !empty($style_options['attachment']['feature_group'])) {
             $handler->render();
-            // @TODO Shall we remove this handler now? It won't have any other
-            // output to show in the area it's rendered.
+            // Remove this handler so it isn't rendered twice.
+            unset($this->view->display_handler->handlers[$area][$handler_id]);
           }
-          // Remove injected parent again.
+          // Remove injected parent view again.
           array_pop($handler->view->parent_views);
         }
       }
