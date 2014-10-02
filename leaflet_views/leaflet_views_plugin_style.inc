@@ -421,6 +421,7 @@ class leaflet_views_plugin_style extends views_plugin_style {
           // Load the related view.
           list($view_name, $display_id) = explode(':', $handler->options['view_to_insert']);
           $view = views_get_view($view_name);
+          $view->set_display($display_id);
 
           // Inject a new parent views so that self::attached_map_data_id() can
           // extract the proper id to store the collected features data.
@@ -428,11 +429,15 @@ class leaflet_views_plugin_style extends views_plugin_style {
 
           // If the added view has the leaflet style and the style is configured
           // to be rendered as feature group trigger rendering right now.
-          if (isset($view->display[$display_id]->display_options['style_plugin']) && $view->display[$display_id]->display_options['style_plugin'] == 'leaflet' && !empty($view->display[$display_id]->display_options['style_options']['attachment']['feature_group'])) {
+          $style_plugin = $view->display_handler->get_option('style_plugin');
+          $style_options = $view->display_handler->get_option('style_options');
+          if ($style_plugin == 'leaflet' && !empty($style_options['attachment']['feature_group'])) {
             $handler->render();
             // @TODO Shall we remove this handler now? It won't have any other
             // output to show in the area it's rendered.
           }
+          // Remove injected parent again.
+          array_pop($handler->view->parent_views);
         }
       }
     }
