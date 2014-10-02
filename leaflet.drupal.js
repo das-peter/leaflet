@@ -232,7 +232,7 @@
       lMap.bounds.push(latLng);
       var lMarker;
 
-      if (marker.html) {
+      if (typeof(marker.html) !== 'undefined' && marker.html !== false) {
         if (marker.html_class) {
           var icon = new L.DivIcon({html: marker.html, className: marker.html_class});
         }
