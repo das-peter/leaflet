@@ -133,8 +133,10 @@ class leaflet_views_plugin_style extends views_plugin_style {
       elseif ($this->is_entity_views_handler($handler)) {
         // Strip the basic field name from the entity views handler field and
         // fetch the field info for it.
-        $field_name = ltrim(substr($handler->real_field, 0, strpos($handler->real_field, ':')), ':');
-        $field_info = field_info_field($field_name);
+        $property = EntityFieldHandlerHelper::get_selector_field_name($handler->real_field);
+        if ($field_name = EntityFieldHandlerHelper::get_selector_field_name(substr($handler->real_field, 0, strpos($handler->real_field, ':' . $property)), ':')) {
+          $field_info = field_info_field($field_name);
+        }
       }
 
       if (!empty($field_info['type']) && $field_info['type'] == 'geofield') {
