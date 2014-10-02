@@ -412,14 +412,16 @@ function leaflet_apply_map_settings(&$map, &$features, $map_settings, $entity_ty
         // its own size, so we override that as well.
         // @todo: actually allow the API settings to control this.
         $feat['icon']['iconSize'] = $settings['icon']['iconSize'];
-        foreach (element_children($icon_field) as $i) {
-          if (!empty($settings['icon']['iconSize']['x'])) {
-            $icon_field[$i]['#item']['width'] = $settings['icon']['iconSize']['x'];
-            unset($icon_field[$i]['#item']['width']);
-          }
-          if (!empty($settings['icon']['iconSize']['y'])) {
-            $icon_field[$i]['#item']['height'] = $settings['icon']['iconSize']['y'];
-            unset($icon_field[$i]['#item']['width']);
+        if (!emtpy($icon_field)) {
+          foreach (element_children($icon_field) as $i) {
+            if (!empty($settings['icon']['iconSize']['x'])) {
+              $icon_field[$i]['#item']['width'] = $settings['icon']['iconSize']['x'];
+              unset($icon_field[$i]['#item']['width']);
+            }
+            if (!empty($settings['icon']['iconSize']['y'])) {
+              $icon_field[$i]['#item']['height'] = $settings['icon']['iconSize']['y'];
+              unset($icon_field[$i]['#item']['width']);
+            }
           }
         }
       }
