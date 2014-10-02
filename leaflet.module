@@ -80,9 +80,6 @@ function leaflet_libraries_info() {
  *   Associative array of map features.
  * @param string $height
  *   The height of the map.
- * @param string $map_id
- *   Custom id for the map. By default the prefix leaflet_map with an
- *   incrementing suffix is used. See drupal_html_id().
  *
  * @return array
  *   A renderable array.
