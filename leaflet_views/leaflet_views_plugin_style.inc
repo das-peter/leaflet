@@ -231,7 +231,7 @@ class leaflet_views_plugin_style extends views_plugin_style {
       '#type' => 'checkbox',
       '#title' => t('Add layer control for features groups.'),
       '#description' => t('Adds a layer control to the map if features groups are found.'),
-      '#default_value' => $this->options['attachment']['feature_group'],
+      '#default_value' => $this->options['attachment']['layer_control'],
     );
 
     // Choose a map preset:
