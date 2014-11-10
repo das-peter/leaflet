@@ -16,27 +16,34 @@
           settings[setting] = this.map.settings[setting];
         }
 
+        // Trigger leaflet.init.
+        $(document).trigger('leaflet.init', [{mapId: this.mapId, settings: settings}]);
+
         // instantiate our new map
         var lMap = new L.Map(this.mapId, settings);
         lMap.bounds = [];
 
+        // Trigger leaflet.map_prepared.
+        $(document).trigger('leaflet.map_prepared', [{lMap: lMap, mapId: this.mapId, settings: settings}]);
+
+        $(document).trigger('leaflet.layers_perpare', [{layers: this.map.layers, lMap: lMap, mapId: this.mapId, settings: settings}]);
         // add map layers
-        var layers = {}, overlays = {};
+        var layers = {}, overlays = {}, map_layer;
         var i = 0;
         for (var key in this.map.layers) {
           var layer = this.map.layers[key];
-          var map_layer = Drupal.leaflet.create_layer(layer, key);
+          if (map_layer = Drupal.leaflet.create_layer(layer, key)) {
+            layers[key] = map_layer;
 
-          layers[key] = map_layer;
-
-          // keep the reference of first layer
-          // as written in the doc (http://leafletjs.com/examples/layers-control.html)
-          // "Also note that when using multiple base layers, only one of them should be added to the map at instantiation, but all of them should be present in the base layers object when creating the layers control."
-          if (i == 0) {
-            // flag the first layer as the default layer.
-            var default_key = key;
+            // keep the reference of first layer
+            // as written in the doc (http://leafletjs.com/examples/layers-control.html)
+            // "Also note that when using multiple base layers, only one of them should be added to the map at instantiation, but all of them should be present in the base layers object when creating the layers control."
+            if (i == 0) {
+              // flag the first layer as the default layer.
+              var default_key = key;
+            }
+            i++;
           }
-          i++;
         }
         // We loop through the layers once they have all been created to connect them to their switchlayer if necessary.
         var switchEnable = false;
@@ -53,48 +60,49 @@
 
         // keep an instance of leaflet layers
         this.map.lLayers = layers;
+        // Trigger leaflet.layers_alter.
+        $(document).trigger('leaflet.layers_alter', [{lLayers: this.map.lLayers, lMap: lMap, mapId: this.mapId, settings: settings}]);
 
         // keep an instance of map_id
         this.map.map_id = this.mapId;
 
+        // Trigger leaflet.features_prepare
+        $(document).trigger('leaflet.features_prepare', [{features: this.features, lMap: lMap, mapId: this.mapId, settings: settings}]);
+
         // add features
+        this.lFeatures = [];
         for (i = 0; i < this.features.length; i++) {
           var feature = this.features[i];
           var lFeature;
+
 
           // dealing with a layer group
           if (feature.group) {
             var lGroup = new L.LayerGroup();
             for (var groupKey in feature.features) {
               var groupFeature = feature.features[groupKey];
-              lFeature = leaflet_create_feature(groupFeature, lMap);
-              if (groupFeature.popup) {
-                lFeature.bindPopup(groupFeature.popup);
+              if (lFeature = leaflet_create_feature(groupFeature, lMap)) {
+                lGroup.addLayer(lFeature);
               }
-              lGroup.addLayer(lFeature);
 
-              // Allow others to do something with the feature within a group.
-              $(document).trigger('leaflet.feature', [lFeature, feature]);
             }
 
             // add the group to the layer switcher
             overlays[feature.label] = lGroup;
 
             lMap.addLayer(lGroup);
+            this.lFeatures.push(lGroup);
           }
           else {
-            lFeature = leaflet_create_feature(feature, lMap);
-            lMap.addLayer(lFeature);
-
-            if (feature.popup) {
-              lFeature.bindPopup(feature.popup);
+            if (lFeature = leaflet_create_feature(feature, lMap)) {
+              lMap.addLayer(lFeature);
+              this.lFeatures.push(lFeature);
             }
-
-            // Allow others to do something with the feature.
-            $(document).trigger('leaflet.feature', [lFeature, feature]);
           }
-
         }
+
+        // Trigger leaflet.features_prepare
+        $(document).trigger('leaflet.features_alter', [{features: this.features, lMap: lMap, mapId: this.mapId, settings: settings}]);
 
         // add layer switcher
         if (this.map.settings.layerControl) {
@@ -132,6 +140,7 @@
 
         // allow other modules to get access to the map object using jQuery's trigger method
         $(document).trigger('leaflet.map', [this.map, lMap]);
+        $(document).trigger('leaflet.map_alter', [{map: this.map, lMap: this.lMap, mapId: this.mapId, settings: settings}]);
 
         // Destroy features so that an AJAX reload does not get parts of the old set.
         // Required when the View has "Use AJAX" set to Yes.
@@ -139,6 +148,12 @@
       });
 
       function leaflet_create_feature(feature, lMap) {
+
+        // Trigger leaflet.feature_create.
+        if ($(document).triggerHandler('leaflet.feature_create', [{feature: feature, lMap: lMap}])) {
+          return false;
+        }
+
         var lFeature;
         switch (feature.type) {
           case 'point':
@@ -178,6 +193,14 @@
           lFeature.setStyle(options);
         }
 
+        if (feature.popup) {
+          lFeature.bindPopup(feature.popup);
+        }
+
+        // Trigger leaflet.feature_alter.
+        $(document).trigger('leaflet.feature', [lFeature, feature]);
+        $(document).trigger('leaflet.feature_alter', [{lFeature: lFeature, feature: feature, lMap: lMap}]);
+
         return lFeature;
       }
 
@@ -187,6 +210,11 @@
   Drupal.leaflet = {
 
     create_layer: function (layer, key) {
+      // Trigger leaflet.layer_create.
+      if ($(document).trigger('leaflet.layer_create', [{layer: layer, key: key}]) === false) {
+        return false;
+      }
+
       // Use a Zoomswitch Layer extension to enable zoom-switch option.
       var map_layer = new L.TileLayerZoomSwitch(layer.urlTemplate);
       map_layer._leaflet_id = key;
@@ -211,6 +239,8 @@
           }, this.options));
         };
       }
+      // Trigger leaflet.layer_alter.
+      $(document).trigger('leaflet.layer_alter', [{lLayer: map_layer, layer: layer, key: key}]);
       return map_layer;
     },
 
