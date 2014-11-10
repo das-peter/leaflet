@@ -79,6 +79,9 @@
           // dealing with a layer group
           if (feature.group) {
             var lGroup = new L.LayerGroup();
+            if (feature.leaflet_id) {
+              lGroup._leaflet_id = feature.leaflet_id;
+            }
             for (var groupKey in feature.features) {
               var groupFeature = feature.features[groupKey];
               if (lFeature = leaflet_create_feature(groupFeature, lMap)) {
