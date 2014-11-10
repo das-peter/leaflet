@@ -259,7 +259,7 @@
       }
     },
 
-    create_point: function(marker, lMap) {
+    create_point: function(marker, lMap, options) {
       var latLng = new L.LatLng(marker.lat, marker.lon);
       latLng = latLng.wrap();
       lMap.bounds.push(latLng);
@@ -306,14 +306,21 @@
         if (marker.icon.zIndexOffset) {
           icon.options.zIndexOffset = marker.icon.zIndexOffset;
         }
-        var options = {icon:icon};
+
+        if (options == undefined) {
+          options = {icon:icon};
+        }
+        else {
+          options.icon = icon;
+        }
+
         if (marker.zIndexOffset) {
           options.zIndexOffset = marker.zIndexOffset;
         }
         lMarker = new L.Marker(latLng, options);
       }
       else {
-        lMarker = new L.Marker(latLng);
+        lMarker = new L.Marker(latLng, options);
       }
 
       if (marker.label) {
@@ -334,7 +341,7 @@
       return new L.Polyline(latlngs);
     },
 
-    create_polygon: function(polygon, lMap) {
+    create_polygon: function(polygon, lMap, options) {
       var latlngs = [];
       for (var i = 0; i < polygon.points.length; i++) {
         var latlng = new L.LatLng(polygon.points[i].lat, polygon.points[i].lon);
@@ -342,10 +349,10 @@
         latlngs.push(latlng);
         lMap.bounds.push(latlng);
       }
-      return new L.Polygon(latlngs);
+      return new L.Polygon(latlngs, options);
     },
 
-    create_multipoly: function(multipoly, lMap) {
+    create_multipoly: function(multipoly, lMap, options) {
       var polygons = [];
       for (var x = 0; x < multipoly.component.length; x++) {
         var latlngs = [];
@@ -359,10 +366,10 @@
         polygons.push(latlngs);
       }
       if (multipoly.multipolyline) {
-        return new L.MultiPolyline(polygons);
+        return new L.MultiPolyline(polygons, options);
       }
       else {
-        return new L.MultiPolygon(polygons);
+        return new L.MultiPolygon(polygons, options);
       }
     },
 
@@ -406,9 +413,9 @@
       return lPopup;
     },
 
-    fitbounds:function (lMap) {
+    fitbounds:function (lMap, options) {
       if (lMap.bounds.length > 0) {
-        lMap.fitBounds(new L.LatLngBounds(lMap.bounds));
+        lMap.fitBounds(new L.LatLngBounds(lMap.bounds), options);
       }
     }
   };
