@@ -13,10 +13,146 @@ module_load_include('inc', 'leaflet', 'leaflet.formatters');
 function leaflet_theme($existing, $type, $theme, $path) {
   return array(
     'leaflet_map' => array(
-      'arguments' => array('map_id' => NULL, 'height' => '400px'),
-      'template' => 'leaflet_map',
+      'variables' => array(
+        'map_id' => NULL,
+        'height' => '400px',
+        'map' => 'OSM Mapnik',
+        'map_info' => array(),
+        'features' => array(),
+      ),
     ),
   );
+}
+
+/**
+ * Theme pre-processing - adds the necessary JS.
+ */
+function leaflet_preprocess_leaflet_map(&$vars) {
+  if (!empty($vars['map_info'])) {
+    $map_info = $vars['map_info'];
+  }
+  elseif (!empty($vars['map'])) {
+    $map_info = leaflet_map_get_info($vars['map']);
+  }
+  else {
+    // @TODO: warning of some sort.
+  }
+  $settings = leaflet_map_prebuild($vars['map_id'], $map_info, $vars['features']);
+
+  // Load the leaflet library, which includes integration files.
+  libraries_load('leaflet');
+
+  drupal_add_css(drupal_get_path('module', 'leaflet') . '/leaflet_extras.css');
+  drupal_add_js(array('leaflet' => array($settings)), 'setting');
+}
+
+/**
+ * Theme function for leaflet map.
+ */
+function theme_leaflet_map($vars) {
+  $build = array(
+    '#theme' => 'html_tag',
+    '#tag' => 'div',
+    '#value' => '',
+    '#attributes' => array(
+      'id' => $vars['map_id'],
+      'style' => 'height: ' . $vars['height'],
+    ),
+  );
+  return render($build);
+}
+
+/**
+ * Attach Leaflet-required client files and return renderable array for a map.
+ *
+ * @param array $map
+ *   Map definition as returned my leaflet_map_get_info();
+ * @param array $features
+ *   Associative array of map features.
+ * @param string $height
+ *   The height of the map.
+ * @param string $map_id
+ *   The map id to use. If provided it's up to the callee to ensure a valid and
+ *   unique html id.
+ *
+ * @return array
+ *   A renderable array.
+ */
+function leaflet_build_map($map, $features = array(), $height = '400px', $map_id = NULL) {
+  // Ensure we've got an unique id.
+  if (empty($map_id)) {
+    $map_id = drupal_html_id('leaflet_map');
+  }
+  $build = array(
+    '#theme' => 'leaflet_map',
+    '#map_id' => $map_id,
+    '#map_info' => $map,
+    '#height ' => $height,
+    '#features' => $features,
+  );
+  return $build;
+}
+
+/**
+ * Set settings for a map id.
+ *
+ * Manages a static cache with the map settings.
+ * If the settings parameter is given the settings are set - otherwise existing
+ * settings are returned by reference.
+ * If settings for a map id already exists and the settings parameter is set the
+ * settings are merged using drupal_array_merge_deep(). The settings parameter
+ * has priority over the already defined settings.
+ *
+ * @param string $map_id
+ *   Unique identifier for a map.
+ * @param array $settings
+ *   Settings array as produced by leaflet_map_prebuild().
+ *
+ * @return array
+ *   The settings array by reference(!)
+ */
+function &leaflet_map_settings($map_id, $settings = array()) {
+  $all_settings = &drupal_static(__FUNCTION__, array());
+  if (!isset($all_settings[$map_id])) {
+    $all_settings[$map_id] = array();
+  }
+  if (!empty($settings)) {
+    $all_settings[$map_id] = drupal_array_merge_deep($all_settings[$map_id], $settings);
+  }
+  return $all_settings[$map_id];
+}
+
+/**
+ * Pre-build drupal leaflet JS settings.
+ *
+ * @param string $map_id
+ *   The map id.
+ * @param array $map
+ *   Map definition as returned my leaflet_map_get_info();
+ * @param array $features
+ *   Associative array of map features.
+ *
+ * @return array
+ *   An array ready to be used as drupal leaflet JS settings.
+ */
+function leaflet_map_prebuild($map_id, $map, $features) {
+  // Allow map definitions to provide a default icon:
+  if (isset($map['icon']['iconUrl'])) {
+    foreach ($features as &$feature) {
+      if (!isset($feature['icon'])) {
+        $feature['icon'] = $map['icon'];
+      }
+    }
+  }
+
+  $settings = leaflet_map_settings($map_id, array(
+    'mapId' => $map_id,
+    'map' => $map,
+    'features' => $features,
+  ));
+  drupal_alter('leaflet_map_prebuild', $settings);
+
+  return $settings;
 }
 
 /**
@@ -69,80 +205,6 @@ function leaflet_libraries_info() {
   );
 
   return $libraries;
-}
-
-/**
- * Attach Leaflet-required client files and return renderable array for a map.
- *
- * @param array $map
- *   Map definition as returned my leaflet_map_get_info();
- * @param array $features
- *   Associative array of map features.
- * @param string $height
- *   The height of the map.
- *
- * @return array
- *   A renderable array.
- */
-function leaflet_build_map($map, $features = array(), $height = '400px') {
-  $map_id = drupal_html_id('leaflet_map');
-  $build = array(
-    '#theme' => 'html_tag',
-    '#tag' => 'div',
-    '#value' => '',
-    '#attributes' => array(
-      'id' => $map_id,
-      'style' => 'height: ' . $height,
-    ),
-  );
-
-  $settings = leaflet_map_prebuild($map_id, $map, $features);
-
-  $build['#attached']['js'][] = array(
-    'data' => array('leaflet' => array($settings)),
-    'type' => 'setting',
-  );
-  $build['#attached']['css'][] = array(
-    'data' => drupal_get_path('module', 'leaflet') . '/leaflet_extras.css',
-  );
-
-  // Load the leaflet library, which includes integration files.
-  libraries_load('leaflet');
-
-  return $build;
-}
-
-/**
- * Pre-build drupal leaflet JS settings.
- *
- * @param string $map_id
- *   The map id.
- * @param array $map
- *   Map definition as returned my leaflet_map_get_info();
- * @param array $features
- *   Associative array of map features.
- *
- * @return array
- *   An array ready to be used as drupal leaflet JS settings.
- */
-function leaflet_map_prebuild($map_id, $map, $features) {
-  // Allow map definitions to provide a default icon:
-  if (isset($map['icon']['iconUrl'])) {
-    foreach ($features as &$feature) {
-      if (!isset($feature['icon'])) {
-        $feature['icon'] = $map['icon'];
-      }
-    }
-  }
-
-  $settings = array(
-    'mapId' => $map_id,
-    'map' => $map,
-    'features' => $features,
-  );
-  drupal_alter('leaflet_map_prebuild', $settings);
-
-  return $settings;
 }
 
 /**

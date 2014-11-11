@@ -25,6 +25,12 @@ class leaflet_views_plugin_style extends views_plugin_style {
   function init(&$view, &$display, $options = NULL) {
     parent::init($view, $display, $options);
 
+    // Ensure we can provide our future map id as early as possible.
+    if (empty($options['map_id'])) {
+      $options['map_id'] = 'leaflet_map';
+    }
+    $this->options['map_id'] = drupal_html_id('leaflet_map');
+
     // Search api indexes store the entity metadata in the views data array.
     if (strpos($view->base_table, 'search_api_index_') === 0) {
       $views_data = views_fetch_data();
@@ -58,6 +64,7 @@ class leaflet_views_plugin_style extends views_plugin_style {
     $options['description_field'] = array('default' => '');
     $options['view_mode'] = array('default' => 'full');
     $options['map'] = array('default' => '');
+    $options['map_id'] = array('default' => '');
     $options['height'] = array('default' => '400');
     $options['hide_empty'] = array('default' => '');
     $options['popup']['contains'] = array(
@@ -267,6 +274,13 @@ class leaflet_views_plugin_style extends views_plugin_style {
       ),
     );
 
+    $form['map_id'] = array(
+      '#title' => t('Map ID'),
+      '#type' => 'textfield',
+      '#default_value' => $this->options['map_id'],
+      '#description' => t('The id for the map. Leave empty for automatic id. Attention this will run throuhg %drupal_html_id to ensure a valid unique id', array('%drupal_html_id' => l(t('drupal_html_id()'), 'https://api.drupal.org/api/drupal/includes!common.inc/function/drupal_html_id/7'))),
+    );
+
     $form['hide_empty'] = array(
       '#title' => t('Hide empty'),
       '#type' => 'checkbox',
@@ -410,9 +424,17 @@ class leaflet_views_plugin_style extends views_plugin_style {
       if (empty($data) && !empty($this->options['hide_empty'])) {
         return '';
       }
-      return leaflet_build_map($map, $data, $this->options['height'] . 'px');
+      $map = leaflet_build_map($map, $data, $this->options['height'] . 'px', $this->options['map_id']);
+      return $map;
     }
     return '';
+  }
+
+  /**
+   * Returns the map id stored for this view.
+   */
+  public function getMapId() {
+    return $this->options['map_id'];
   }
 
   /**
